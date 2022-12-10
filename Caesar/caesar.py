@@ -5,6 +5,7 @@ import shutil
 def convert(dir_in, dir_out, dir_move, rota=3):
     dir_in = os.fsdecode(dir_in)
     dir_out = os.fsdecode(dir_out)
+    dir_out = dir_out + str(rota) + "/"
     dir_move = os.fsdecode(dir_move)
     for file in os.listdir(dir_in):
         filename = os.fsdecode(file)
@@ -14,9 +15,10 @@ def convert(dir_in, dir_out, dir_move, rota=3):
             text = f.read()
             ciphertext = caesar(text, rota)[0]
             f.close()
-            #TODO move to converted
-            #shutil.move(dir_in + file, dir_out + file)
-            newfile = open(dir_out + str(rota) + "/" + filename, "w")
+            shutil.move(dir_in + file, dir_move + file)
+            if not(os.path.exists(dir_out)):
+                os.mkdir(dir_out)
+            newfile = open(str(rota) + "_" + dir_out + filename, "w")
             newfile.write(ciphertext)
             newfile.close()
     return
