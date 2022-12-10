@@ -14,7 +14,7 @@ def test(dir_out, dir_move, rota=3):
         else:
             unequal_strings.append(file)
 
-    print(str(len(equal_strings)) + " Dateien stimmen überein.\n\n")
+    print(str(len(equal_strings)) + " Dateien stimmen überein.\n")
     print(str(len(unequal_strings)) + " Fehler aufgetreten:")
     for name in unequal_strings:
         print(name)
@@ -61,7 +61,7 @@ def convert(dir_in, dir_out, dir_move, rota=3):
             newfile.write(ciphertext)
             newfile.close()
             count += 1
-    print("Verarbeitung vollständig. " + str(count) + " Dateien verschlüsselt.")
+    print("Verarbeitung vollständig. " + str(count) + " Dateien verschlüsselt.\n")
     return
 
 
