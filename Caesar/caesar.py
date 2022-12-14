@@ -65,16 +65,23 @@ def convert(dir_in, dir_out, dir_move, rota=3):
     return
 
 
+def mod(n, p):
+    if n < 0:
+        n = p - abs(n) % p
+
+    return n % p
+
+
 def caesar(cleartext, i=3):
     ciphertext = ""
     for c in cleartext:
         ascii = ord(c)
         # Großbuchstaben
         if 65 <= ascii <= 90:
-            c = chr((ascii + i - 65) % 26 + 65)
+            c = chr(mod((ascii + i - 65), 26) + 65)
         # Kleinbuchstaben
         if 97 <= ascii <= 122:
-            c = chr((ascii + i - 97) % 26 + 97)
+            c = chr(mod((ascii + i - 97), 26) + 97)
         ciphertext += c
     return ciphertext, i
 
@@ -83,12 +90,12 @@ def uncaesar(ciphertext, i=3):
     return caesar(ciphertext, -i)
 
 
-"""
-print("Start")
-print(caesar("abc! xyz. 123"))
-print(uncaesar(caesar("abc! xyz. 123")))
-print("ABC! XYZ. 789")
-print(uncaesar("ABC! XYZ. 789"))
-"""
+"""str1 = caesar("abc! xyz. 123")[0]
+print(str1)
+print(uncaesar(str1)[0])
+str2 = caesar("ABC! XYZ. 789")[0]
+print(str2)
+print(uncaesar(str2)[0])"""
+
 convert("./in/", "./out/", "./converted/")
 test("./out/", "./converted/")
