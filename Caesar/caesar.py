@@ -1,5 +1,7 @@
 import os
 import shutil
+import random
+import re
 
 
 def test(dir_out, dir_move, rota=3):
@@ -51,18 +53,64 @@ def convert(dir_in, dir_out, dir_move, rota=3):
         if filename.endswith(".txt"):
             f = open(dir_in + file, "r")
             text = f.read()
-            ciphertext = caesar(text, rota)[0]
+            splitted_text = split(text)
+            count_of_words = len(splitted_text)
+            for i in range(0, 26):
+                new_dir_out = dir_out + str(i) + "/"
+                if not(os.path.exists(new_dir_out)):
+                    os.mkdir(new_dir_out)
+                iterator = 0
+                for word in splitted_text:
+                    print("Rotate by " + str(i) + ", word " + str(iterator) + " out of " + str(count_of_words))
+                    ciphertext = caesar(word, i)[0]
+                    newfile = open(new_dir_out + str(i) + "_" + filename + "_" + str(iterator), "w")
+                    iterator += 1
+                    newfile.write(ciphertext)
+                    newfile.close()
             f.close()
             shutil.move(dir_in + file, dir_move + file)
-            new_dir_out = dir_out + str(rota) + "/"
-            if not(os.path.exists(new_dir_out)):
-                os.mkdir(new_dir_out)
-            newfile = open(new_dir_out + str(rota) + "_" + filename, "w")
-            newfile.write(ciphertext)
-            newfile.close()
+
             count += 1
     print("Verarbeitung vollständig. " + str(count) + " Dateien verschlüsselt.\n")
     return
+
+
+def generate_training_and_test_data_at_random(dir_in, dir_test, dir_training):
+    dir_test += "/"
+    dir_training += "/"
+    for dir in os.listdir(dir_in):
+        dir_sub = dir_in + "/" + dir
+        for file in os.listdir(dir_sub):
+            if random.randint(0, 1) == 0:
+                shutil.copy(dir_sub + "/" + file, dir_test + file)
+                print(file + " is test data")
+            else:
+                shutil.copy(dir_sub + "/" + file, dir_training + file)
+                print(file + " is training data")
+    return
+
+
+def split(text):
+    single_words = text.split()
+    text = text.replace('!', '.')
+    text = text.replace('?', '.')
+    full_sentences = text.split('. ')
+    text = text.replace(',', '.')
+    text = text.replace(';', '.')
+    text = text.replace('-', '.')
+    text = text.replace(':', '.')
+    partial_sentences = text.split('. ')
+
+    for word in partial_sentences:
+        single_words.append(word)
+    for word in full_sentences:
+        single_words.append(word)
+
+    return remove_duplicates(single_words)
+
+
+def remove_duplicates(list_of_words):
+    return list(dict.fromkeys(list_of_words))
 
 
 def mod(n, p):
@@ -98,4 +146,5 @@ print(str2)
 print(uncaesar(str2)[0])"""
 
 convert("./in/", "./out/", "./converted/")
-test("./out/", "./converted/")
+#test("./out/", "./converted/")
+generate_training_and_test_data_at_random("./out", "./test data", "./training data")
