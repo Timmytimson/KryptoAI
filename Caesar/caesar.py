@@ -60,13 +60,14 @@ def convert(dir_in, dir_out, dir_move, rota=3):
                 if not(os.path.exists(new_dir_out)):
                     os.mkdir(new_dir_out)
                 iterator = 0
+                newfile = open(dir_out + str(i) + "_" + filename, "a")
                 for word in splitted_text:
                     print("Rotate by " + str(i) + ", word " + str(iterator) + " out of " + str(count_of_words))
                     ciphertext = caesar(word, i)[0]
-                    newfile = open(new_dir_out + str(i) + "_" + filename + "_" + str(iterator), "w")
+                    ciphertext += '\n'
                     iterator += 1
                     newfile.write(ciphertext)
-                    newfile.close()
+                newfile.close()
             f.close()
             shutil.move(dir_in + file, dir_move + file)
 
@@ -78,15 +79,18 @@ def convert(dir_in, dir_out, dir_move, rota=3):
 def generate_training_and_test_data_at_random(dir_in, dir_test, dir_training):
     dir_test += "/"
     dir_training += "/"
-    for dir in os.listdir(dir_in):
-        dir_sub = dir_in + "/" + dir
-        for file in os.listdir(dir_sub):
+    for file in os.listdir(dir_in):
+        file_training = open(dir_training + os.fsdecode(file), 'a')
+        file_testing = open(dir_test + os.fsdecode(file), 'a')
+        for line in open(dir_in + '/' + file, 'r'):
             if random.randint(0, 1) == 0:
-                shutil.copy(dir_sub + "/" + file, dir_test + file)
-                print(file + " is test data")
+                file_training.write(line)
+                print(line + " is training data")
             else:
-                shutil.copy(dir_sub + "/" + file, dir_training + file)
-                print(file + " is training data")
+                file_testing.write(line)
+                print(line + " is test data")
+        file_training.close()
+        file_testing.close()
     return
 
 
