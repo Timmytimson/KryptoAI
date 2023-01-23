@@ -137,7 +137,7 @@ def random_training_example():
     return category, line, rotation_tensor, line_tensor
 
 
-def train(rotation_tensor, sample_tensor):
+def train(rotation_tensor, sample_tensor, learning_rate):
     hidden = network.initHidden()
     hidden = hidden.cuda()
 
@@ -167,14 +167,18 @@ def time_running(since):
 '''
 Main
 '''
-n_iters = 1000  # 2500*26 = 65000
+n_iters = 20000  # 2500*26 = 65000
 print_every = n_iters/20
 plot_every = 2*print_every
+lower_learn_rate_every = n_iters/5
 
 
+n_hidden = 128
+network = Network(n_letters, n_hidden, n_categories)
+network = network.cuda()
 criterion = nn.NLLLoss()
 
-learning_rate = 0.005 # If you set this too high, it might explode. If too low, it might not learn
+base_learning_rate = 0.005 # If you set this too high, it might explode. If too low, it might not learn
 
 
 # Keep track of losses for plotting
@@ -185,9 +189,6 @@ all_losses = []
     category, line, category_tensor, line_tensor = randomTrainingExample()
     print('category =', category, '/ line =', line)'''
 
-n_hidden = 128
-network = Network(n_letters, n_hidden, n_categories)
-network = network.cuda()
 
 '''input = line_to_tensor('Albert')
 hidden = torch.zeros(1, n_hidden)
@@ -198,7 +199,7 @@ output, next_hidden = network(input[0], hidden)'''
 #print(categoryFromOutput(output))
 
 start = time.time()
-
+learning_rate = base_learning_rate
 n_errors = 0
 for iter in range(1, n_iters + 1):
     rotation, line, category_tensor, line_tensor = random_training_example()
@@ -206,7 +207,7 @@ for iter in range(1, n_iters + 1):
         continue
     category_tensor = category_tensor.cuda()
     line_tensor = line_tensor.cuda()
-    output, loss = train(category_tensor, line_tensor)
+    output, loss = train(category_tensor, line_tensor, learning_rate)
     current_loss += loss
 
     # Print iter number, loss, name and guess
