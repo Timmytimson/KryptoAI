@@ -37,6 +37,10 @@ def to_ascii(str):
         and c in letters
     )
 
+def is_null_or_empty(str):
+    if not str:
+        return True
+
 
 # Build the category_lines dictionary, a list of names per language
 rotation_lines = {}
@@ -135,6 +139,7 @@ def random_training_example():
 
 def train(rotation_tensor, sample_tensor):
     hidden = network.initHidden()
+    hidden = hidden.cuda()
 
     network.zero_grad()
 
@@ -162,7 +167,7 @@ def time_running(since):
 '''
 Main
 '''
-n_iters = 10000
+n_iters = 1000  # 2500*26 = 65000
 print_every = n_iters/20
 plot_every = 2*print_every
 
@@ -182,11 +187,12 @@ all_losses = []
 
 n_hidden = 128
 network = Network(n_letters, n_hidden, n_categories)
+network = network.cuda()
 
-input = line_to_tensor('Albert')
+'''input = line_to_tensor('Albert')
 hidden = torch.zeros(1, n_hidden)
 
-output, next_hidden = network(input[0], hidden)
+output, next_hidden = network(input[0], hidden)'''
 #print(output)
 
 #print(categoryFromOutput(output))
@@ -195,26 +201,24 @@ start = time.time()
 
 n_errors = 0
 for iter in range(1, n_iters + 1):
-    try:
-        rotation, line, category_tensor, line_tensor = random_training_example()
-        output, loss = train(category_tensor, line_tensor)
-        current_loss += loss
+    rotation, line, category_tensor, line_tensor = random_training_example()
+    if is_null_or_empty(line):
+        continue
+    category_tensor = category_tensor.cuda()
+    line_tensor = line_tensor.cuda()
+    output, loss = train(category_tensor, line_tensor)
+    current_loss += loss
 
-        # Print iter number, loss, name and guess
-        if iter % print_every == 0:
-            guess, guess_i = rotation_from_output(output)
-            correct = '✓' if guess == rotation else '✗ (%s)' % rotation
-            print('%d %d%% (%s) %.4f %s / %s %s' % (iter, iter / n_iters * 100, time_running(start), loss, line, guess, correct))
+    # Print iter number, loss, name and guess
+    if iter % print_every == 0:
+        guess, guess_i = rotation_from_output(output)
+        correct = '✓' if guess == rotation else '✗ (%s)' % rotation
+        print('%d %d%% (%s) %.4f %s / %s %s' % (iter, iter / n_iters * 100, time_running(start), loss, line, guess, correct))
 
-        # Add current loss avg to list of losses
-        if iter % plot_every == 0:
-            all_losses.append(current_loss / plot_every)
-            current_loss = 0
-    except:
-        n_errors += 1
-        print('Error at iteration ', iter)
-        print('rotation tensor ', category_tensor)
-        print('line tensor ', line_tensor)
+    # Add current loss avg to list of losses
+    if iter % plot_every == 0:
+        all_losses.append(current_loss / plot_every)
+        current_loss = 0
 print(n_errors, ' errors occured')
 plt.figure()
 plt.plot(all_losses)
