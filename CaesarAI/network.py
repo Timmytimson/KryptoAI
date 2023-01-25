@@ -75,18 +75,21 @@ def read_lines(filename):
     return [to_ascii(line) for line in file]
 
 
-# Build the category_lines dictionary, a list of names per language
-rotation_lines = {} # TODO in funktion packen
-all_rotations = []
+def init_data(dir):
+    # Build the category_lines dictionary, a list of names per language
+    rotation_lines = {}
+    all_rotations = []
 
-for file in find_files(dir_training):
-    rotation = os.path.splitext(os.path.basename(file))[0]
-    rotation = rotation.split('_')[0]
-    all_rotations.append(rotation)
-    lines = read_lines(file)
-    rotation_lines[rotation] = lines
+    for file in find_files(dir):
+        rotation = os.path.splitext(os.path.basename(file))[0]
+        rotation = rotation.split('_')[0]
+        all_rotations.append(rotation)
+        lines = read_lines(file)
+        rotation_lines[rotation] = lines
 
-n_rotations = len(all_rotations)
+    n_rotations = len(all_rotations)
+
+    return all_rotations, rotation_lines, n_rotations
 
 
 def letter_to_index(chr):
@@ -204,6 +207,7 @@ else:
     print_every = n_iters/20
     plot_every = 2*print_every
 
+    all_rotations, rotation_lines, n_rotations = init_data(dir_training)
 
     n_hidden = 128
     network = Network(n_letters, n_hidden, n_rotations)
