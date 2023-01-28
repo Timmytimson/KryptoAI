@@ -15,3 +15,5 @@ for file in os.listdir("./training data"):
 print('Test', n_test)
 print('Train', n_training)
 
+print(int('02'))
+

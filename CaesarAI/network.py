@@ -25,14 +25,20 @@ class Network(nn.Module):
 
         self.hidden_size = hidden_size
 
-        self.i2h = nn.Linear(input_size + hidden_size, hidden_size)
-        self.i2o = nn.Linear(input_size + hidden_size, output_size)
+        self.hid = nn.Linear(input_size + hidden_size, hidden_size)
+        self.lin1 = nn.Linear(input_size + hidden_size, output_size)
+        self.dropout1 = nn.Dropout(p=0.2)
+        self.lin2 = nn.Linear(output_size, output_size)
+        self.dropout2 = nn.Dropout(p=0.3)
         self.softmax = nn.LogSoftmax(dim=1)
 
     def forward(self, input, hidden):
         combined = torch.cat((input, hidden), 1)
-        hidden = self.i2h(combined)
-        output = self.i2o(combined)
+        hidden = self.hid(combined)
+        output = self.lin1(combined)
+        output = self.dropout1(output)
+        output = self.lin2(output)
+        output = self.dropout2(output)
         output = self.softmax(output)
         return output, hidden
 
@@ -119,7 +125,12 @@ def line_to_tensor(line):
 '''
 Training
 '''
-
+def rotational_error(output_tensor, target_tensor):
+    top_n, top_i = output_tensor.topk(1)
+    index_out = top_i[0].item()
+    top_n, top_i = target_tensor.topk(1)
+    index_target = top_i[0].item()
+    return abs(index_out-index_target)
 
 def time_running(since):
     now = time.time()
@@ -158,11 +169,12 @@ def random_training_example(all_rotations, rotation_lines):
     return category, line, rotation_tensor, line_tensor
 
 
-def train_network(rotation_tensor, sample_tensor, learning_rate):
+def train_network(rotation_tensor, sample_tensor, learning_rate, criterion):
     hidden = network.initHidden()
     hidden = hidden.cuda()
 
     network.zero_grad()
+    network.train()
 
     for i in range(sample_tensor.size()[0]):
         output, hidden = network(sample_tensor[i], hidden)
@@ -177,7 +189,7 @@ def train_network(rotation_tensor, sample_tensor, learning_rate):
     return output, loss.item()
 
 
-def train(all_rotations, print_every, plot_every, lower_learn_rate_thresholds):
+def train(all_rotations, print_every, plot_every, lower_learn_rate_thresholds, criterion):
     # Keep track of losses for plotting
     current_loss = 0
     all_losses = []
@@ -188,13 +200,13 @@ def train(all_rotations, print_every, plot_every, lower_learn_rate_thresholds):
     n_errors = 0
     nan_error_occured = False
     for iter in range(1, n_iters + 1):
-        rotation, line, category_tensor, line_tensor = random_training_example(all_rotations, rotation_lines)
+        rotation, line, rotation_tensor, line_tensor = random_training_example(all_rotations, rotation_lines)
         if is_null_or_empty(line):
             continue
-        category_tensor = category_tensor.cuda()
+        rotation_tensor = rotation_tensor.cuda()
         line_tensor = line_tensor.cuda()
 
-        output, loss = train_network(category_tensor, line_tensor, learning_rate)
+        output, loss = train_network(rotation_tensor, line_tensor, learning_rate, criterion)
         current_loss += loss
         all_losses.append(loss)
 
@@ -207,7 +219,7 @@ def train(all_rotations, print_every, plot_every, lower_learn_rate_thresholds):
             guess, guess_i = rotation_from_output(output, all_rotations)
             correct = '✓' if guess == rotation else '✗ (%s)' % rotation
             #print('%d %d%% (%s) %.4f %s / %s %s' % (iter, iter / n_iters * 100, time_running(start), loss, line, guess, correct))
-            print(iter, str(iter/n_iters * 100) + '% Loss=' + str(loss))
+            print(iter, str(round(iter/n_iters * 100)) + '% Loss=' + str(loss))
             print('\tguessed', guess, 'for', line, correct)
 
         # Add current loss avg to list of losses
@@ -249,9 +261,10 @@ def test_network(dir_test, network, n_tests):
     n_correct = [0] * 6
     n_wrong = [0] * 6
     mismatches = []
+    network.eval()
     hidden = network.initHidden()
     hidden = hidden.cuda()
-    print_every = n_tests/20
+    print_every = n_tests/10
 
     all_rotations, rotation_lines, n_rotations = init_data(dir_test)
     for iters in range(n_tests):
@@ -308,7 +321,8 @@ def evaluate(n_correct, n_wrong, mismatches, print_errors=False):
 '''
 Main
 '''
-network_filename = 'caesar_network.pt'
+network_filename = 'caesar_network.pt'#
+save_network = True
 
 
 # existing network
@@ -331,15 +345,16 @@ else:
     network = network.cuda()
     criterion = nn.NLLLoss()
 
-    base_learning_rate = 0.001 # If you set this too high, it might explode. If too low, it might not learn
+    base_learning_rate = 0.002 # If you set this too high, it might explode. If too low, it might not learn
     min_steps = 1000
     lower_learn_rate_thresholds = get_thresholds(n_iters, min_steps)
 
-    network, nan_error_occured = train(all_rotations, print_every, plot_every, lower_learn_rate_thresholds)
+    network, nan_error_occured = train(all_rotations, print_every, plot_every, lower_learn_rate_thresholds, criterion)
 
     if nan_error_occured:
         exit()
-    torch.save(network, network_filename)
+    if save_network:
+        torch.save(network, network_filename)
 
 n_tests = 10000
 
