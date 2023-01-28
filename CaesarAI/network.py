@@ -121,17 +121,36 @@ Training
 '''
 
 
-def rotation_from_output(out):
+def time_running(since):
+    now = time.time()
+    s = now - since
+    m = math.floor(s / 60)
+    s -= m * 60
+    return '%dm %ds' % (m, s)
+
+
+def get_thresholds(n_iters, min_steps):
+    increment = int(n_iters / 2)
+    threshold = 0
+    thresholds = [threshold]
+    while(increment > min_steps):
+        threshold += increment
+        thresholds.append(threshold)
+        increment = int(increment / 2)
+
+    return thresholds
+
+def rotation_from_output(out, all_rotations):
     top_n, top_i = out.topk(1)
-    category_i = top_i[0].item()
-    return all_rotations[category_i], category_i
+    rotation = top_i[0].item()
+    return all_rotations[rotation], rotation
 
 
 def random_choice(line):
     return line[random.randint(0, len(line) - 1)]
 
 
-def random_training_example():
+def random_training_example(all_rotations, rotation_lines):
     category = random_choice(all_rotations)
     line = random_choice(rotation_lines[category])
     rotation_tensor = torch.tensor([all_rotations.index(category)], dtype=torch.long)
@@ -139,7 +158,7 @@ def random_training_example():
     return category, line, rotation_tensor, line_tensor
 
 
-def train(rotation_tensor, sample_tensor, learning_rate):
+def train_network(rotation_tensor, sample_tensor, learning_rate):
     hidden = network.initHidden()
     hidden = hidden.cuda()
 
@@ -158,52 +177,150 @@ def train(rotation_tensor, sample_tensor, learning_rate):
     return output, loss.item()
 
 
-def time_running(since):
-    now = time.time()
-    s = now - since
-    m = math.floor(s / 60)
-    s -= m * 60
-    return '%dm %ds' % (m, s)
+def train(all_rotations, print_every, plot_every, lower_learn_rate_thresholds):
+    # Keep track of losses for plotting
+    current_loss = 0
+    all_losses = []
+    plot_losses = []
 
-
-'''
-Testing
-'''
-
-
-def test_network(dir_test, n_tests):
-    n_correct = 0
-    n_wrong = 0
-
-    for iters in range(n_tests):
-        rotation, line, category_tensor, line_tensor = random_training_example()
+    start = time.time()
+    learning_rate = base_learning_rate
+    n_errors = 0
+    nan_error_occured = False
+    for iter in range(1, n_iters + 1):
+        rotation, line, category_tensor, line_tensor = random_training_example(all_rotations, rotation_lines)
         if is_null_or_empty(line):
             continue
         category_tensor = category_tensor.cuda()
         line_tensor = line_tensor.cuda()
 
+        output, loss = train_network(category_tensor, line_tensor, learning_rate)
+        current_loss += loss
+        all_losses.append(loss)
+
+        if math.isnan(loss):
+            nan_error_occured = True
+            print('Loss at step', iter, 'is not a number. Last losses were\n', all_losses[len(all_losses)-10:])
+            break
+        # Print iter number, loss, name and guess
+        if iter % print_every == 0:
+            guess, guess_i = rotation_from_output(output, all_rotations)
+            correct = '✓' if guess == rotation else '✗ (%s)' % rotation
+            #print('%d %d%% (%s) %.4f %s / %s %s' % (iter, iter / n_iters * 100, time_running(start), loss, line, guess, correct))
+            print(iter, str(iter/n_iters * 100) + '% Loss=' + str(loss))
+            print('\tguessed', guess, 'for', line, correct)
+
+        # Add current loss avg to list of losses
+        if iter % plot_every == 0:
+            plot_losses.append(current_loss / plot_every)
+            current_loss = 0
+
+        if iter in lower_learn_rate_thresholds:
+            learning_rate = learning_rate/2
+            print('Lowering learning rate to ', learning_rate)
+
+    print(n_errors, ' errors occured')
+    plt.figure()
+    plt.plot(plot_losses)
+    plt.show()
+    return network, nan_error_occured
+
+
+'''
+Testing
+'''
+def increment_according_to_len(line, list):
+    l = len(line)
+    if l <= 20:
+        list[0] += 1
+    elif 20 < l <= 40:
+        list[1] += 1
+    elif 40 < l <= 60:
+        list[2] += 1
+    elif 60 < l <= 80:
+        list[3] += 1
+    elif 80 < l <= 100:
+        list[4] += 1
+    else:
+        list[5] += 1
+    return list
+
+def test_network(dir_test, network, n_tests):
+    n_correct = [0] * 6
+    n_wrong = [0] * 6
+    mismatches = []
+    hidden = network.initHidden()
+    hidden = hidden.cuda()
+    print_every = n_tests/20
+
+    all_rotations, rotation_lines, n_rotations = init_data(dir_test)
+    for iters in range(n_tests):
+        rotation, line, rotation_tensor, line_tensor = random_training_example(all_rotations, rotation_lines)
+        if is_null_or_empty(line):
+            continue
+        rotation_tensor = rotation_tensor.cuda()
+        line_tensor = line_tensor.cuda()
+
         for i in range(line_tensor.size()[0]):
             output, hidden = network(line_tensor[i], hidden)
 
-    return n_correct, n_wrong
+        guessed_rotation = rotation_from_output(output, all_rotations)[1]
+        if guessed_rotation == int(rotation):
+            n_correct = increment_according_to_len(line, n_correct)
+        else:
+            n_wrong = increment_according_to_len(line, n_wrong)
+            mismatches.append((guessed_rotation, rotation, line))
+        if iters % print_every == 0:
+            print(str(round(iters/n_tests*100)) + '% done')
+
+    return n_correct, n_wrong, mismatches
 
 
-def evaluate(n_correct, n_wrong):
-    n_all = n_correct + n_wrong
+def evaluate(n_correct, n_wrong, mismatches, print_errors=False):
+    sum_correct = sum(n_correct)
+    sum_wrong = sum(n_wrong)
+    n_all = sum_correct + sum_wrong
     print('Tested the network on', n_all, 'words and sentences.')
-    print(n_correct,'examples were classified correctly.', '(' + str(n_correct/n_all*100) + '%)')
-    print(n_wrong,'examples were classified wrong.', '(' + str(n_wrong/n_all*100) + '%)')
+    print(sum_correct, 'examples were classified correctly.', '(' + str(sum_correct/n_all*100) + '%)')
+    print(sum_wrong, 'examples were classified wrong.', '(' + str(sum_wrong/n_all*100) + '%)')
+    print('')
 
+    bot = 1
+    top = 20
+    for i in range(len(n_correct)):
+        n_all = n_correct[i] + n_wrong[i]
+        if bot < 100:
+            print('For words with a length from', bot, 'to', top)
+        else:
+            print('For words with a length from', bot, 'onwards')
+        print('\t', n_correct[i], 'examples were classified correctly.', '(' + str(n_correct[i]/n_all*100) + '%)')
+        print('\t', n_wrong[i], 'examples were classified wrong.', '(' + str(n_wrong[i]/n_all*100) + '%)')
+        print('')
+        bot += 20
+        top += 20
+
+
+    if print_errors:
+        for tuple in mismatches:
+            print(tuple)
+    return
 
 '''
 Main
 '''
 network_filename = 'caesar_network.pt'
+
+
+# existing network
 if os.path.isfile(network_filename):
-    caesar_network = torch.load(network_filename)
-    caesar_network = caesar_network.cuda()
+    print('Found already trained network.')
+    network = torch.load(network_filename)
+    network = network.cuda()
+# new network
 else:
-    n_iters = 50000  # 2500*26 = 65000
+    print('No network found in directory.')
+    print('Training new network.')
+    n_iters = 65000  # 2500*26 = 65000
     print_every = n_iters/20
     plot_every = 2*print_every
 
@@ -214,63 +331,18 @@ else:
     network = network.cuda()
     criterion = nn.NLLLoss()
 
-    base_learning_rate = 0.002 # If you set this too high, it might explode. If too low, it might not learn
-    lower_learn_rate_every = n_iters/5
+    base_learning_rate = 0.001 # If you set this too high, it might explode. If too low, it might not learn
+    min_steps = 1000
+    lower_learn_rate_thresholds = get_thresholds(n_iters, min_steps)
 
+    network, nan_error_occured = train(all_rotations, print_every, plot_every, lower_learn_rate_thresholds)
 
-    # Keep track of losses for plotting
-    current_loss = 0
-    all_losses = []
-
-    '''for i in range(10):
-        category, line, category_tensor, line_tensor = randomTrainingExample()
-        print('category =', category, '/ line =', line)'''
-
-
-    '''input = line_to_tensor('Albert')
-    hidden = torch.zeros(1, n_hidden)
-    
-    output, next_hidden = network(input[0], hidden)'''
-    #print(output)
-    #print(categoryFromOutput(output))
-
-    start = time.time()
-    learning_rate = base_learning_rate
-    n_errors = 0
-    for iter in range(1, n_iters + 1):
-        rotation, line, category_tensor, line_tensor = random_training_example()
-        if is_null_or_empty(line):
-            continue
-        category_tensor = category_tensor.cuda()
-        line_tensor = line_tensor.cuda()
-
-        output, loss = train(category_tensor, line_tensor, learning_rate)
-        current_loss += loss
-        all_losses.append(loss)
-
-        if math.isnan(loss):
-            print('Loss at step', iter, 'is not a number. Last losses were\n', all_losses[len(all_losses)-10:])
-            break
-        # Print iter number, loss, name and guess
-        if iter % print_every == 0:
-            guess, guess_i = rotation_from_output(output)
-            correct = '✓' if guess == rotation else '✗ (%s)' % rotation
-            #print('%d %d%% (%s) %.4f %s / %s %s' % (iter, iter / n_iters * 100, time_running(start), loss, line, guess, correct))
-            print(iter, str(iter/n_iters * 100) + '% Loss=' + str(loss))
-            print('\tguessed', guess, 'for', line, correct)
-
-        # Add current loss avg to list of losses
-        if iter % plot_every == 0:
-            all_losses.append(current_loss / plot_every)
-            current_loss = 0
-
-        if iter % lower_learn_rate_every == 0:
-            learning_rate = learning_rate/2
-            print('Lowering learning rate to ', learning_rate)
-
-    print(n_errors, ' errors occured')
-    plt.figure()
-    plt.plot(all_losses)
-    plt.show()
-
+    if nan_error_occured:
+        exit()
     torch.save(network, network_filename)
+
+n_tests = 10000
+
+print('Testing RNN with', n_tests, 'words and sentences.')
+n_correct, n_wrong, mismatches = test_network(dir_test, network, n_tests)
+evaluate(n_correct, n_wrong, mismatches)
