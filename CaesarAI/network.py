@@ -42,7 +42,7 @@ class Network(nn.Module):
         output = self.softmax(output)
         return output, hidden
 
-    def initHidden(self):
+    def init_hidden(self):
         return torch.zeros(1, self.hidden_size)
 
 
@@ -68,12 +68,10 @@ def to_ascii(str):
         and c in letters
     )
 
+
 def is_null_or_empty(str):
     if not str:
         return True
-
-
-# Read a file and split into lines
 
 
 def read_lines(filename):
@@ -82,7 +80,6 @@ def read_lines(filename):
 
 
 def init_data(dir):
-    # Build the category_lines dictionary, a list of names per language
     rotation_lines = {}
     all_rotations = []
 
@@ -102,35 +99,31 @@ def letter_to_index(chr):
     return letters.find(chr)
 
 
-# Just for demonstration, turn a letter into a <1 x n_letters> Tensor
 def letter_to_tensor(chr):
     tensor = torch.zeros(1, n_letters)
     tensor[0][letter_to_index(chr)] = 1
     return tensor
 
 
-# Turn a line into a <line_length x 1 x n_letters>,
-# or an array of one-hot letter vectors
 def line_to_tensor(line):
     tensor = torch.zeros(len(line), 1, n_letters)
     for li, letter in enumerate(line):
         tensor[li][0][letter_to_index(letter)] = 1
     return tensor
 
-# print(letterToTensor('J'))
-
-# print(lineToTensor('Jones').size())
-
 
 '''
 Training
 '''
+
+
 def rotational_error(output_tensor, target_tensor):
     top_n, top_i = output_tensor.topk(1)
     index_out = top_i[0].item()
     top_n, top_i = target_tensor.topk(1)
     index_target = top_i[0].item()
     return abs(index_out-index_target)
+
 
 def time_running(since):
     now = time.time()
@@ -144,12 +137,13 @@ def get_thresholds(n_iters, min_steps):
     increment = int(n_iters / 2)
     threshold = 0
     thresholds = [threshold]
-    while(increment > min_steps):
+    while increment > min_steps:
         threshold += increment
         thresholds.append(threshold)
         increment = int(increment / 2)
 
     return thresholds
+
 
 def rotation_from_output(out, all_rotations):
     top_n, top_i = out.topk(1)
@@ -170,7 +164,7 @@ def random_training_example(all_rotations, rotation_lines):
 
 
 def train_network(rotation_tensor, sample_tensor, learning_rate, criterion):
-    hidden = network.initHidden()
+    hidden = network.init_hidden()
     hidden = hidden.cuda()
 
     network.zero_grad()
@@ -182,7 +176,6 @@ def train_network(rotation_tensor, sample_tensor, learning_rate, criterion):
     loss = criterion(output, rotation_tensor)
     loss.backward()
 
-    # Add parameters' gradients to their values, multiplied by learning rate
     for p in network.parameters():
         p.data.add_(p.grad.data, alpha=-learning_rate)
 
@@ -214,15 +207,13 @@ def train(all_rotations, print_every, plot_every, lower_learn_rate_thresholds, c
             nan_error_occured = True
             print('Loss at step', iter, 'is not a number. Last losses were\n', all_losses[len(all_losses)-10:])
             break
-        # Print iter number, loss, name and guess
+
         if iter % print_every == 0:
             guess, guess_i = rotation_from_output(output, all_rotations)
             correct = '✓' if guess == rotation else '✗ (%s)' % rotation
-            #print('%d %d%% (%s) %.4f %s / %s %s' % (iter, iter / n_iters * 100, time_running(start), loss, line, guess, correct))
             print(iter, str(round(iter/n_iters * 100)) + '% Loss=' + str(loss))
             print('\tguessed', guess, 'for', line, correct)
 
-        # Add current loss avg to list of losses
         if iter % plot_every == 0:
             plot_losses.append(current_loss / plot_every)
             current_loss = 0
@@ -241,6 +232,8 @@ def train(all_rotations, print_every, plot_every, lower_learn_rate_thresholds, c
 '''
 Testing
 '''
+
+
 def increment_according_to_len(line, list):
     l = len(line)
     if l <= 20:
@@ -257,12 +250,13 @@ def increment_according_to_len(line, list):
         list[5] += 1
     return list
 
+
 def test_network(dir_test, network, n_tests):
     n_correct = [0] * 6
     n_wrong = [0] * 6
     mismatches = []
     network.eval()
-    hidden = network.initHidden()
+    hidden = network.init_hidden()
     hidden = hidden.cuda()
     print_every = n_tests/10
 
@@ -289,7 +283,7 @@ def test_network(dir_test, network, n_tests):
     return n_correct, n_wrong, mismatches
 
 
-def evaluate(n_correct, n_wrong, mismatches, print_errors=False):
+def evaluate(n_correct, n_wrong, mismatches, file, iteration, print_errors=False):
     sum_correct = sum(n_correct)
     sum_wrong = sum(n_wrong)
     n_all = sum_correct + sum_wrong
@@ -297,7 +291,7 @@ def evaluate(n_correct, n_wrong, mismatches, print_errors=False):
     print(sum_correct, 'examples were classified correctly.', '(' + str(sum_correct/n_all*100) + '%)')
     print(sum_wrong, 'examples were classified wrong.', '(' + str(sum_wrong/n_all*100) + '%)')
     print('')
-
+    line = str(iteration) + '\t' + str(sum_correct/n_all*100) + '\t'
     bot = 1
     top = 20
     for i in range(len(n_correct)):
@@ -311,12 +305,16 @@ def evaluate(n_correct, n_wrong, mismatches, print_errors=False):
         print('')
         bot += 20
         top += 20
-
+        line += str(n_correct[i]/n_all*100)
+        line += '\t'
+    line += '\n'
+    file.write(line)
 
     if print_errors:
         for tuple in mismatches:
             print(tuple)
-    return
+    return str(n_correct[i]/n_all*100)
+
 
 '''
 Main
@@ -345,7 +343,7 @@ else:
     network = network.cuda()
     criterion = nn.NLLLoss()
 
-    base_learning_rate = 0.002 # If you set this too high, it might explode. If too low, it might not learn
+    base_learning_rate = 0.003
     min_steps = 1000
     lower_learn_rate_thresholds = get_thresholds(n_iters, min_steps)
 
@@ -357,7 +355,15 @@ else:
         torch.save(network, network_filename)
 
 n_tests = 10000
+n_runs = 20
+all_n_corrects = []
+file = open('protocol.txt', 'a')
+file.write('Run\t%correct\t%correct <20t%correct <40\t%correct <60\t%correct <80\t%correct <100\t%correct >100\n')
+for iter in range(1, n_runs+1):
+    print('Testing RNN with', n_tests, 'words and sentences.')
+    n_correct, n_wrong, mismatches = test_network(dir_test, network, n_tests)
+    all_n_corrects.append(evaluate(n_correct, n_wrong, mismatches, file, iter))
 
-print('Testing RNN with', n_tests, 'words and sentences.')
-n_correct, n_wrong, mismatches = test_network(dir_test, network, n_tests)
-evaluate(n_correct, n_wrong, mismatches)
+file.close()
+
+
